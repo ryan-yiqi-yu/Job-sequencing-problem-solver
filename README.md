@@ -23,6 +23,7 @@ order for the solution to run.
 5. This command should run the solution on the given inputs and create outputs.
 6. Wait for the program to finish running and you're finished.
 
+# Job Sequencing Solution
 
 Our approach to this problem consisted of several different algorithms. Listed below are the algorithms we incorporated into our final solution.
 
