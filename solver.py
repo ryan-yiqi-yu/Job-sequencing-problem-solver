@@ -1,6 +1,7 @@
 from parse import read_input_file, write_output_file
 import os
 import random
+from math import comb
 
 ## TODO: Implement job sequencing problem (without loss function) optimum solution:
 ## https://stackoverflow.com/questions/61352269/job-sequencing-problem-with-three-parameters
@@ -40,7 +41,7 @@ def dp_knapsack(tasks):
     path_grid = [[[] for _ in range(len(tasks)+1)] for _ in range(1440+1)]
     for task_i in range(1, len(tasks)+1):
         duration = tasks[task_i-1].get_duration()
-        profit = tasks[task_i-1].get_max_benefit()
+        profit = tasks[task_i-1].get_max_benefit() / duration
         for time in range(1, 1441):
             if duration > time:
                 continue
@@ -66,9 +67,10 @@ def maxima_finder(tasks):
     time = 1440
     improve = True
     max_profit = 0
+    attempted = []
     while improve:
         improve = False
-        for _ in range(1000):
+        for _ in range(100000):
             tasks_copy = tasks[:]
             schedule = []
             while tasks_copy:
@@ -77,13 +79,18 @@ def maxima_finder(tasks):
                     schedule.append(tasks_copy[i].get_task_id())
                     time -= tasks_copy[i].get_duration()
                 tasks_copy.pop(i)
+
+            schedule_hash = hash(tuple(schedule))
+            if schedule_hash in attempted:
+                continue
+            attempted.append(schedule_hash)
             profit = calculate_profit(schedule, tasks)
             if profit > max_profit:
                 max_profit = profit
                 schedule_max = schedule[:]
                 improve = True
-                break
     return schedule_max
+
 
 
 def maxima(schedule, tasks):
@@ -91,18 +98,31 @@ def maxima(schedule, tasks):
     schedule_max = schedule[:]
     schedule_copy = schedule[:]
     max_profit = calculate_profit(schedule, tasks)
+    schedule_len = len(schedule_copy)
+    iters = comb(schedule_len, 2)
+    swaps = []
+    ij = []
+    for i in range(schedule_len):
+        for j in range(schedule_len):
+            if i == j and (i,j) in swaps or (j,i) in swaps:
+                continue
+            swaps.append((i,j))
     while improve:
         improve = False
-        for _ in range(10000):
+        for _ in range(iters):
+            i, j = swaps[int(schedule_len * random.random())]
+            if (i,j) in ij or (j,i) in ij:
+                continue
+            ij.append((i,j))
             schedule_copy = schedule_max[:]
-            i = random.randrange(len(schedule_copy))
-            j = random.randrange(len(schedule_copy))
             schedule_copy[i], schedule_copy[j] = schedule_copy[j], schedule_copy[i]
             profit = calculate_profit(schedule_copy, tasks)
             if profit > max_profit:
+                ij = []
                 max_profit = profit
                 schedule_max = schedule_copy[:]
                 improve = True
+                break
     return schedule_max
 
 
@@ -184,7 +204,7 @@ def solve(tasks):
 
 
 
-    return schedule_dict[max_profit]
+    return max_schedule
     """
     task_order = []
     for task in tasks:
@@ -349,21 +369,75 @@ def recalibrate_output():
         if size not in ['small', 'medium', 'large']:
             continue
         for output_file in os.listdir('outputs/{}/'.format(size)):
-            if size not in input_file:
+            if size not in output_file:
                 continue
             output_path = 'outputs/{}/{}'.format(size, output_file)
+            input_path = 'inputs/{}/{}.in'.format(size, output_file[:-4])
             with open(output_path, encoding="utf-8-sig") as output_file:
                 output_lines = output_file.readlines()
                 schedule = []
                 for line in output_lines:
                     id = int(line)
                     schedule.append(id)
-            input_path = 'inputs/{}/{}.in'.format(size, output_file[:-4])
+                print(input_path, output_path)
             tasks = read_input_file(input_path)
+            test_schedule = dp_knapsack(tasks[:])
+            max_schedule = maxima(test_schedule[:], tasks)
+            if calculate_profit(max_schedule, tasks) > calculate_profit(schedule,tasks):
+                print(calculate_profit(max_schedule, tasks) - calculate_profit(schedule,tasks))
+                write_output_file(output_path, max_schedule)
 
+
+def absolute_maxima_guesser():
+    for size in os.listdir('outputs/'):
+        if size not in ['small', 'medium', 'large']:
+            continue
+        for output_file in os.listdir('outputs/{}/'.format(size)):
+            if size not in output_file:
+                continue
+            output_path = 'outputs/{}/{}'.format(size, output_file)
+            input_path = 'inputs/{}/{}.in'.format(size, output_file[:-4])
+            with open(output_path, encoding="utf-8-sig") as output_file:
+                output_lines = output_file.readlines()
+                schedule = []
+                for line in output_lines:
+                    id = int(line)
+                    schedule.append(id)
+                print(input_path, output_path)
+            tasks = read_input_file(input_path)
+            schedule1 = maxima(greedy_recalculate_per_iteration_backwards(tasks[:]),tasks[:])
+            schedule2 = maxima(greedy_recalculate_per_iteration_backwards_profit(tasks[:]),tasks[:])
+            schedule3 = maxima(greedy_recalculate_per_iteration(tasks[:]),tasks[:])
+            schedule4 = maxima(greedy_recalculate_per_iteration_profit(tasks[:]),tasks[:])
+            #schedule5 = maxima(greedy(tasks[:]),tasks[:])
+            schedule6 = maxima(dp_knapsack(tasks[:]),tasks[:])
+            #schedule7 = maxima(greedy_past_deadline(tasks[:]),tasks[:])
+            schedule_dict = {calculate_profit(schedule1, tasks[:]):schedule1, calculate_profit(schedule2, tasks[:]):schedule2,
+            calculate_profit(schedule3, tasks[:]):schedule3, calculate_profit(schedule4, tasks[:]):schedule4,
+            calculate_profit(schedule6, tasks[:]):schedule6}
+            max_profit = max(schedule_dict, key=schedule_dict.get)
+            max_schedule = schedule_dict[max_profit]
+            if max_profit > calculate_profit(schedule,tasks):
+                if max_schedule == schedule1:
+                    print('p/d backwards')
+                elif max_schedule == schedule2:
+                    print('p backwards')
+                elif max_schedule == schedule3:
+                    print('p/d forwards')
+                elif max_schedule == schedule4:
+                    print('p forward')
+                #elif max_schedule == schedule5:
+                #    print('greedy')
+                elif max_schedule == schedule6:
+                    print('knapsack')
+                #elif max_schedule == schedule7:
+                #    print('greedy past')
+                print(max_profit - calculate_profit(schedule,tasks))
+                write_output_file(output_path, max_schedule)
 
 # Here's an example of how to run your solver.
-if __name__ == '__main__':
+#if __name__ == '__main__':
+def main():
      for size in os.listdir('inputs/'):
          if size not in ['small', 'medium', 'large']:
              continue
@@ -376,3 +450,5 @@ if __name__ == '__main__':
              tasks = read_input_file(input_path)
              output = solve(tasks)
              write_output_file(output_path, output)
+
+absolute_maxima_guesser()
