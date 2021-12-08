@@ -395,5 +395,5 @@ def main():
              write_output_file(output_path, output)
 
 if __name__ == '__main__':
-    #absolute_maxima_approx()
+    absolute_maxima_approx()
     recalibrate_output()
